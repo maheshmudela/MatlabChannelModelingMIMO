@@ -13,7 +13,7 @@
 % s(k,bit(i)) = 1-2*bit(i) + j 0, pilot has only I +j 0.
 %Bpsk , qpsk, 9psk, , there is  s(k,bit(i,i+1,i+2) =  i(k) + j*q(k), where k = 0<k<DataBits/3..
 %Reverse Traffic Channel with Radio Configurations 3 to 6
-% 8psk, reverse traffic use bpsk, qpsk and 8psk fllowed by orthogonal spreadingTechniq
+% 8 psk, reverse traffic use bpsk, qpsk and 8psk fllowed by orthogonal spreadingTechniq
 % and piot it use orthogonal spreading witout any modulation
 
 %But for other RC 1/2 ,reveser link use orthogonal modulation for traffic channel
@@ -57,7 +57,7 @@
 % symbol on reverser link.
 %But wcdma/umts has fixed on of pilot bits.
 
-%Forward link pilot bits are transmitted continously, but orthogonally
+%Forward link pilot bits are transmitted continously, but orthogonally spread at
 % at 1.2288e6 chips per second at osf 64, so
 % bits per frame   1.2288e6/64 = 19.2kbs or per frame 384 bits
 
@@ -231,7 +231,7 @@ for slotIndex=1:16
     %Scrambling with LONG CODE, Direct sequence spreading using the long code
     %The in-phase spreading sequence shall be formed by a modulo-2 addition of the I-channel
     %PN sequence and the I long code sequence.
-    ILongCodeComplexD = ILongCodeUser + IchannelShortCode;
+    ILongCodeComplexD = modulo(ILongCodeUser + IchannelShortCode,2);
 
     %The quadrature-phase spreading sequence shall
     %be formed by the modulo-2 addition of the following three terms: the 2
@@ -281,30 +281,222 @@ for slotIndex=1:16
 
 end
 
+% When we hav channel h(k), , we can have
+% 1. we can break the channel svd decompistion, to have procoding
+% and channel matrix =  H = UZV, Z, we can have rank of this matrix
+% based on rank, we can most L path to be used for rake reciver
+% or also causing predistortion at sent so that such channel
+% is made flat for all w /Ts,
+
 % This 16 slot 20ms frame is channel
 
 % Add channel artificat/fading/awgn and fading
 
 
-% Rake Receiver
+% Rake Receiver at base station
 
-% Generate I and Q scrambling sequence that sync PN 15
-% IQ combining
-% for every slot in frame
+%
+%The received input is downconverted to based band using inpahse and quadrature oscillator
 
-for every delay of 1
-                 i=m/2
-   delay = argmax ( E(Idata.*Iq_Pn(i))
-                 i=-m/2
+% In phase and  Quadrature
+
+IRxData =  [IdataGain(1:end)];
+
+QRxData =  [QdataGain(1:end)];
+
+%  match filtering for frame sync
+% FOR ALL slot in 20ms
+IRxDataS = [IRxData[1:(2*Ts/Tc))]
+for ci=0: 2*Osvf;
+     Eng = E{IRxData .*PnSeqI};
+
+     if Max < Eng
+        Max = Eng
+        offset = ci;
+     end
+      IRxDataS = [zeros(1,ci) IRxDataS(ci:end]
+
+
+end
+%Make sure Rxdata buffer is atleast holdng 40ms data, and read every
+% 20ms from the buffer at offset ci, and from appliaction, this 40ms buffer is always popluated
+% at every 20ms.
+RxCorrected = [IRxData[ci:end)]
+
+
+
+%long code for user lave mask? mobile term id?
+
+%Later I and Q are scrambled  with short m-sequence, the short code
+% diffrenetiate teh signal emiited by diffrenet base station,
+%  All base station uses same code but with differnet timing offset and
+% recever attemts to syncronize to this short code  strongnest corrleation
+% idenetifies the nearest base stataion
+
+
+%Gpss receiver seraches for presence of gpss satellite signal
+% by correlting the receved signal with diffrent gold sequence
+% since period, is 20ms, same signal seq is repeated in period
+% of 1 ms.
+
+%Since the current slot cntain orthogonal data from all user
+%           1152   384 chips          1556
+%   slot = [pilot dataUser1] (+) [user2 data ]  (+)
+% so same slot contain all the user but orthogonally , This means better orthgonallygnallity
+% or long orthogonal code give more possibliy of more users!
+
+% So first tracking recviver for coode sync, frame sync
+
+
+%This is recever specifucally as base station , that
+% has data from all users ms.
+%Capture 20ms frame and process in ping pong way
+
+%prev 20ms and current 20ms , 40ms buffer
+%
+bufferIQ = [IQ20msBuffer1  IQ20msBuffer2]
+
+[basebandI basebandQ]= HardwareDownconversion(bufferIQ);
+
+
+% Generate I AND q short code PN seq PN seq of length 15, bases on currnet basestation
+%
+
+[pnSeqI  pnSeqQ] = generatePN(stationId);
+
+[basebandI basebandQ] = HardwareDownconversion(bufferIQ);
+
+% Later stages it will be analysed  for data . error
+[descsrambledI]  = basebandI .*pnSeqI;
+[descsrambledIQ] = basebandI .*pnSeqQ;
+
+
+%Need to anayze more on this channel estmation based Pilot
+% hbar = [hbar0 ...];
+%  l=0 [ a0  a1  a(L-1     ]  [h0] = [hbar0]
+   l=1                        [h1] =
+
+% estimated pilot = hbar . *yRx ; after sommtehung of h
+%
+% Here y = [], as recved descrambled  demultiplex pilot, from  l=0 path
+% and same form other path l=2
+
+
+
+%Fir LPF for smotthening the decsison of channel coeffent of lth path
+% let say fir coeff , Need to check ,
+% Adapative fir filter, the no of coeffient are based on max delay supported
+% a= R
+%h = SmoothingChannel(h(l,:);
+
+%LMS UPDATE OF CHANNEL, in Rake reciver . FIR as L tapped delay , time varinat
+% channel and its performance.
+% It somethinging like passing or recveing the symbols with persion Ts, all consectuive symbols
+% passed from such tapped delay lne channel.. as
+
+% symbol rate or Ts, is limited by time variant channel ,
+% For all pilot symbols in slot.
+% this channel estimation.. in this loop based on rake rever apparoch
+%
+
+
+
+
+for step=1:M % M now can be seen as no of symbols in slot?
+
+  %L say Ts , Ts/L=   or 2pi/L, so, N or L is some sort
+  % sort L PATHS OR , What i can say, more L mean better SNR for any modulation
+  % N or L can be choice of modulation /SNR condiation, better or SNR, LESS
+  % FADING slow fading, no fading we can have L as say 1 or 2, so
+  %  less perfomrance power needed, so it means L has to be function of
+  % SNR as recved and analyzed based on feedback path.
+  % For every next symbol this FIR filter gain and updated to accuracy
+  % finally for any time < Td, time dipersion
+  % from  awgn estimate of channel, we get dpller spectrum, or time vairant
+  % correlation pattren.. and found td/fm,
+  % Ts <td, ideally .. IF not, then Ts/Td, where there is channges
+  % n of L or N =Ts/td, this ddteremine resoltion, phase
+  % channeged as info  or phase chnages as info < 2*pi/N, so
+  % what psk it can support is given by <= 2*Pi/N, witout any phase error
+  % same for fdm, ??
+  %Ts/Td, td time dispersion, FIR order is Ts/Td,?
+  for l:1 L-1
+
+      %Descrambling wrt station code,
+      %hk = conjugate(bk) . *ypk  =  *bk .*(ak*bk + wk) = *bk.*bk*ak + *bk.*wk where |bk*bk| = 1
+      %  = ak + noisek, ak is channel coeffient?? which is cmplex??
+      % Genrate pilot symbol, walsh sperad and then scmable with short code
+      % and then same
+      % first cut hk, is found to be for any path.., generally pilot
+      % signal are speard with only short code .
+
+      % all delay in colmwise , l col by adding zero, as shift
+      descsrambledI(l,1) = sum([ zeros(1,l) basebandI] .*pnSeqI); %Tc/Ts=N
+      descsrambledQ(l,1) = sum([ zeros(1,l) basebandQ] .*pnSeqQ);
+
+
+      rateFactorI = prvSymbolI(l,1) *errorI ;
+      rateFactorQ = prvSymbolQ(l,1) *errorQ ;
+
+      %lms fir filter that smmthen the h, lth path channel estimate
+       hsmothenI(l) = lpf(rateFactorI, hi(l,1)) ;
+       hsmothenQ(l) = lpf(rateFactorQ, hq(l,1)) ;
+
+       estimatedPilotSymbol(l) = descsrambledI(L,1)*hsmothenI(l,1);
+       estimatedPilotSymboQ(l) = descsrambledI(L,1)*hsmothenI(l,1);
+
+       TempErrorI(l) = ActualPilotSymbol - estimatedPilotSymbol(l)
+       TempErrorI(l) = ActualPilotSymbol - estimatedPilotSymbol(l)
+
+     end
+
+    %fINAL ESTIMATED i SYMBOL FROM ALL PATH
+
+    errorI = sum(TempErrorI)
+    errorQ = sum(TempErrorI)
 
 end
 
-% Once Sync is found, then extract Pilot bits
-% 1. Make probabalistic model of channel, and pass your info ( pilot bits) through such channel at recver
-% and  mimimize error =  r(t) – modeledout(t), what is best qam symbol which mimimizes the error?
-% s_bar(t), scrambled symbols,
+for user=1: K
+   %Now based on abve channel estimate,
 
-x_bar(t) = s_bar(t) + w_bar(t);  //    this is receved signal , w is white gaussian noise.
+   %Dequalize the data in same slot  and as well other orthignal trafiic users
+
+end
+
+
+
+
+
+
+
+
+
+  end:
+
+
+
+
+
+
+end
+
+
+for userIdx=0: MaxUser
+
+     scrambler = scrambler[userIdx,:]
+
+
+
+
+
+
+end
+
+
+
+
+
 
 
 
