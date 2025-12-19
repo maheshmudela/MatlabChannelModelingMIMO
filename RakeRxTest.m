@@ -391,11 +391,11 @@ for slotIndex=1:16
 
     QOrthogonalStream = (imag(DschSymbolPerSlotSpread) + QOrthogonalStreamP);
 
-    ILongCodeComplexD  = [ILongCodeComplexD20((slotIndex-1)*1536+1:slotIndex*1536)];
-    QLongCodeComplexD  = [QLongCodeComplexD20((slotIndex-1)*1536+1:slotIndex*1536)];
+    ILongCodeComplexDTemp  = [ILongCodeComplexD20((slotIndex-1)*1536+1:slotIndex*1536)];
+    QLongCodeComplexDTemp  = [QLongCodeComplexD20((slotIndex-1)*1536+1:slotIndex*1536)];
     %Complex multiplication as quadrature spreading
-    IDataSymbolPerSlotScrambled = IOrthogonalStream .*ILongCodeComplexD;
-    QDataSymbolPerSlotScrambled = QOrthogonalStream .*QLongCodeComplexD;
+    IDataSymbolPerSlotScrambled = IOrthogonalStream .*ILongCodeComplexDTemp;
+    QDataSymbolPerSlotScrambled = QOrthogonalStream .*QLongCodeComplexDTemp;
 
      %If there are mutplie SCH OR MORE TRAFFIC channel then , but now its one
     % DataSymbolPerSlotScrambled = DataSymbolPerSlotSpreadChanel2*LongCodeComplexD;
@@ -446,7 +446,11 @@ end
 %This is cmplex baseband after , downconversion and LPF
 %at 1.2288e6 chip per second.
 
-%//BasebandIQ = HardwareDownconversion(bufferIQ);
+ChipRate = 1.2288e6;
+
+%Later this has to same as tx size with fading adding.
+
+BasebandIQ = randi([-15 16], 1, ChipRate) + j*randi([-15 16], 1, ChipRate); %[HardwareDownconversion(bufferIQ);
 
 % Add channel artificat/fading/awgn and fading
 % Rake Receiver at base station
@@ -473,7 +477,13 @@ end
 % In advance ,
 % generate 1second worth of samples
 % This generate long code 42 bits and 15 bits , quadrature scrambling code.
-%//pnQuadLongSeqQ = generateQudraturePN(stationId);
+% Quadrature
+frameCount = 1;
+
+ILongCodeComplexD20       =[ILongCodeComplexD((frameCount -1)*LongCodeLen*16+1:frameCount*LongCodeLen*16)];
+QLongCodeComplexD20       =[QLongCodeComplexD((frameCount -1)*LongCodeLen*16+1:frameCount*LongCodeLen*16)];
+
+%pnQuadLongSeqQ = [];%generateQudraturePN(stationId);
 
 % Note sure but need to see, pilot bits are wlash spread and scrambles
 % at recver, these final symbols now matched filter
@@ -481,13 +491,17 @@ end
 % or just generate decsramled sequence and match filter with input
 %
 % Pilot bits are known at receiver.
-%//PilotBit = randi([1 1], 1, 1152);
+PilotBit  = randi([0 0], 1, 18);
+
+PilotBitS = 1-2*PilotBit;
 
 %scramble the pilot bits
-%//PilotWalshSpread = kron(PilotBit, W0);
+PilotWalshSpread = kron(PilotBitS, W0);
 
 %pnQuadLongSeqQ, is complex qurature descrambler, to
-%//PilotScrambledRef = PilotWalshSpread .*pnQuadLongSeqQ;
+PilotScrambledRef = PilotWalshSpread .*ILongCodeComplexD20(1:1152);
+
+
 
 % Read 2 slot worth of symbol, for code syncronization
 % Descrambled =
@@ -495,29 +509,37 @@ end
 % FOR ALL slot in 20ms
 
 %IRxData = [BasebandIQ[1:(2*Ts/Tc))]
-%//IRxData  = [BasebandIQ(1:1536*2)]
-%//for slotIndex=1:2
+IRxData  = [BasebandIQ(1:1536*2)];
 
-%//  IRxDataS =  IRxData((slotIndex-1)*1536+1:slotIndex*1536);
-%//  for chipIndex=1:1536
-%//         Eng = sum(IRxDataS(1:1152) .*PilotScrambledRef(1:1152));
+Max=0;
+offset = 0;
+Engery = 0;
 
-%     if Max < Eng
-%        Max = Eng
-%        offset = ci;
-%     end
-%      IRxDataS = [zeros(1,chipIndex) IRxDataS(chipIndex:end-chipIndex)
+slotIndex=1
+%for
+  IRxDataS1 =  [IRxData];%IRxData((slotIndex-1)*1536+1:slotIndex*1536);
+  for chipIndex=1:1151
 
-%//  end
+         %Match filtering corrleation at delay chip index
+         Eng = sum(IRxDataS1(chipIndex:(1151+chipIndex) ).*PilotScrambledRef(1:1152));
 
-%//end
+         Engery = (real(Eng)*real(Eng) + imag(Eng)*imag(Eng));
+
+     if Max < Engery
+        Max = Engery;
+        offset = chipIndex;
+     end
+      IRxDataS1 = [zeros(1,chipIndex) IRxData(chipIndex:(1152+chipIndex))];
+
+  end
+
+%end
 
 %Make sure Rxdata buffer is atleast holdng 40ms data, and read every
 % 20ms from the buffer at offset ci, and from appliaction, this 40ms buffer is always popluated
 % at every 20ms. , read offseted 20ms frame data from  cirecular buffer ? each elemnet
 % is buffer of 1.25 ms worth of sample at 1.2288e6 rate.
-%//RxCorrectedIQ = [BasebandIQ[ci:end)];
-
+RxCorrectedIQ = [BasebandIQ(offset:end)];
 
 %Need to anayze more on this channel estmation based Pilot
 
@@ -546,11 +568,32 @@ end
 % For all pilot symbols in slot.
 % this channel estimation.. in this loop based on rake rever apparoch
 %
+%18 pilot symbols
+M=18;
+L=16;
 
+descsrambledI = zeros(L, 1536);
+descsrambledQ = zeros(L, 1536);
+prvSymbolI    = zeros(L,1);
+prvSymbolQ    = zeros(L,1);
+
+hsmothenI     =zeros(L,1);
+hsmothenQ     =zeros(L,1);
+hi            =zeros(L,1);
+hq            =zeros(L,1);
+estimatedPilotSymbol = zeros(L,1);
+estimatedPilotSymboQ = zeros(L,1);
+TempErrorQ = zeros(L,1152);
+TempErrorI = zeros(L,1152);
+
+rateFactorI =1;
+errorI=0;
+rateFactorQ=1;
+errorQ=0;
 
 %For every pilot symbol, channel estimat is updated. No of Pilot symbols
 % are known.
-%//for step=1:M % M now can be seen as no of symbols in slot?
+for step=1:M % M now can be seen as no of symbols in slot?
 
   %L say Ts , Ts/L=   or 2pi/L, so, N or L is some sort
   % sort L PATHS OR , What i can say, more L mean better SNR for any modulation
@@ -570,7 +613,7 @@ end
   %Ts/Td, td time dispersion, FIR order is Ts/Td,?
 
   %
-  %//for l:1 L-1
+  for l=1:L-1
 
       % Descrambling wrt station code,
       % hk = conjugate(bk) . *ypk  =  *bk .*(ak*bk + wk) = *bk.*bk*ak + *bk.*wk where |bk*bk| = 1
@@ -580,37 +623,75 @@ end
       % first cut hk, is found to be for any path.., generally pilot
       % signal are speard with only short code .
 
+      start = l;
+      end1   = 1152 + start;
       % all delay in colmwise , l col by adding zero, as shift
-  %//    descsrambledI(l,1) = sum([zeros(1,l)  real(RxCorrectedIQ (l:1152-l)) .*real(pnQuadLongSeqQ)); %Tc/Ts=N
-  %//    descsrambledQ(l,1) = sum([zeros(1,l)  imag(RxCorrectedIQ](l:1152-l)) .*imag(pnQuadLongSeqQ));
+      RxShiftedI = [real(RxCorrectedIQ(start:(end1-1)))];
+      RxShiftedQ = [imag(RxCorrectedIQ(start:(end1-1)))];
+
+      %descsrambledI = RxShiftedI.*real(pnQuadLongSeqQ); %Tc/Ts=N
+      %descsrambledQ = RxShiftedI.*imag(pnQuadLongSeqQ);
+
+      tempI = RxShiftedI.*real(PilotScrambledRef);
+      tempQ = RxShiftedQ.*imag(PilotScrambledRef);
+
+      rxI = reshape(tempI,length(W0),[]);
+      despreadI = (W0(:)' *rxI)/length(W0);
+      rxQ = reshape(tempQ,length(W0),[]);
+      despreadQ = (W0(:)' *rxQ)/length(W0);
+
 
       %Not sure but need to see, ZF techniqes at any path l, as an awgn channel estimate
-  %//    hi(l,1) = descsrambledI(l,1) .*real(PilotScrambledRef);
-  %//    hQ(l,1) = descsrambledI(l,1) .*imag(PilotScrambledRef);
-
+      hi(l,1) = sum(despreadI);
+      hq(l,1) = sum(despreadQ);
 
       %What %age of prv amount to be
-  %//    rateFactorI = prvSymbolI(l,1) *errorI ;
-  %//    rateFactorQ = prvSymbolQ(l,1) *errorQ ;
+      rateFactorI = prvSymbolI(l,1)*errorI + 0.0001 ;
+      rateFactorQ = prvSymbolQ(l,1)*errorQ + 0.0001;
 
       %lms fir filter that smmthen the h, lth path channel estimate
-  %//    hsmothenI(l) = lpf(rateFactorI, hi(l,1)) ;
-  %//    hsmothenQ(l) = lpf(rateFactorQ, hq(l,1)) ;
 
-  %//    estimatedPilotSymbol(l) = descsrambledI(L,1)*hsmothenI(l,1);
-  %//    estimatedPilotSymboQ(l) = descsrambledQ(L,1)*hsmothenQ(l,1);
+      %TO-DO FIR ADAPTIVE filter for smoothing the channel coeff of any path L;
+      hsmothenI(l,1) = hi(l,1);%lpf(rateFactorI, hi(l,1)) ;
+      hsmothenQ(l,1) = hq(l,1); %lpf(rateFactorQ, hq(l,1)) ;
 
-  %//    TempErrorI(l) = PilotScrambledRef - estimatedPilotSymbol(l)
-  %//    TempErrorI(l) = PilotScrambledRef - estimatedPilotSymbol(l)
+      estimatedPilotSymbol = RxShiftedI*hsmothenI(l,1);
+      estimatedPilotSymboQ = RxShiftedQ*hsmothenQ(l,1);
 
-  %//   end
+      %This is estimatd scrambled pilot, BUT quad descramble
+      tempI = estimatedPilotSymbol .*ILongCodeComplexD20(1:1152);
+      tempQ = estimatedPilotSymboQ .*QLongCodeComplexD20(1:1152);
+
+      rxI = reshape(tempI,length(W0),[]);
+      despreadI = (W0(:)' *rxI)/length(W0);
+      rxQ = reshape(tempQ,length(W0),[]);
+      despreadQ = (W0(:)' *rxQ)/length(W0);
+
+      prvSymbolI(l,1)  = sum(despreadI);
+      prvSymbolQ(l,1)  = sum(despreadQ);
+
+      TempErrorI(l,:) = real(PilotScrambledRef) .-estimatedPilotSymbol;
+      TempErrorQ(l,:) = imag(PilotScrambledRef) .-estimatedPilotSymboQ;
+  end
 
     %fINAL ESTIMATED i SYMBOL FROM ALL PATH
+    %2, here mean summing all col
+    %1, summing all col.
 
-    %//errorI = sum(TempErrorI)
-    %//errorQ = sum(TempErrorI)
+    TPerrorI = sum(TempErrorI,1);
+    TPerrorQ = sum(TempErrorQ,1);
 
-%//end
+    rxI = reshape(TPerrorI,length(W0),[]);
+    despreadI = (W0(:)' *rxI)/length(W0);
+    rxQ = reshape(TPerrorQ,length(W0),[]);
+    despreadQ = (W0(:)' *rxQ)/length(W0);
+
+
+    errorI = sum(despreadI);
+    errorI = sum(despreadQ);
+
+
+end
 
 % For every user channel estimate is called as above but here once
 % channel estimate for particular user is done then For all channel
