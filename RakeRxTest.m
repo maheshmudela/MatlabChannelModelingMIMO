@@ -147,15 +147,17 @@ DataPerSec = dataRate/Rate;
 %dataRate=9600 bits OR 2 bit group symbol ,
 
 %This data bits are time multiplex with pilot bits in Pich?.
-DataRateP = 4800;
+DataRateP = 4800; %
+
+
 DataBitsP  =  randi([0 1], 1, DataRateP);
 
 %19.2
 dschBits  =  randi([0 1], 1, dataRate);
 
-
 %9.6*1.25=12, 12*16=192 bits per 20ms, x50, frames , mean 9.6kbs.
 DataBitsPerSecondP   = 1 - 2*DataBitsP;
+
 
 % 16 psk, every 4 bits mapped to iq
 dschBitsSymbol = reshape(dschBits, 4, []);
@@ -170,6 +172,7 @@ DataBitsSymbolMappedP = [ DataBitsPerSecondP] ;% randi([-15 16], 1, length(DataB
 
 %For Now mapped to consrellation point, for now its just random
 dsch2BitsSymbolMapped = randi([-15 16], 1, length(dschBitsSymbol)) + j*randi([-15 16], 1, length(dschBitsSymbol));
+
 
 % 9.6 symbol per ms, each slot is 1.25ms, so 12 symbols per slot, each slot holds
 % Pilot chips per slot is 1152 and is spread by W0(64), so 18 bits per slot
@@ -194,8 +197,12 @@ H1    = hadamard(2);
 
 %Channelisation code
 W0   = Hp(1,:); %Pilot
+
+% Spreading factor : 128 W1/W2
 W1   = Hd(1,:); %time Multiplex traffic with pilot
 W2   = Hd(2,:); %orthogonal traffic with other channel such as pilot
+
+%2
 W3   = H1(1,:);
 
 %orthogonalData  = zeros(1, length(dschBitsSymbolMapped)*length(W1));
@@ -244,7 +251,7 @@ QLongCodeUser = [zeros(1,1) ILongCodeUser(1:end-1)];
 % PQ(x) = x15 + x12 + x11+ x10 + x6 + x5 + x4 + x3 + 1
 % (for the quadrature-phase (Q) sequence).
 
-
+%chipRate=1.22886e6
 IchannelShortCode = randi([0 1], 1,chipRate);  %IchannelShortCodeGenerator();
 QchannelShortCode = randi([0 1], 1,chipRate); %QchannelShortCodeGenerator();
 
@@ -320,14 +327,11 @@ powerSymbol= ones(1,1,pbp);
 RepeatationFactor = 64;% needed 1536 bits per slot, 768 after desp, actual is 12,
 
 
-
 %This will process slot by slot every 20ms frame encoded audio
 % Bits Mapping-->(i/q)symbols-->walsh code spread ->   -->qudrature spreading.
 % PilotCanel--->AFTER WALSH CODE SPREAD-->I channel
 % traficc    -->After walsh spred------->I AND Q, all all i and q and finally
 % IQ, scrambling with comples DS code.
-
-
 
 
 for slotIndex=1:16
@@ -341,6 +345,7 @@ for slotIndex=1:16
 
     pilotSymbolPerSlot = [pilotSymPerFrame20ms((slotIndex-1)*PilotSymbolPerSlot+1:slotIndex*PilotSymbolPerSlot)];
 
+
     %Osvf spread , channelization , to make 1152 chips per slot, pilotSymbolPerSlot
     %Each symbl is multiplied by Hp, Hadmard walsh code.
     %
@@ -352,11 +357,23 @@ for slotIndex=1:16
 
     %Puncturing the data bits for adding power control bits
     %Rc 3, 800 bps that 1 bits
-    FinalSlotDataPunctured=[FinalSlotData(1:end-pbp)  powerSymbol(1:pbp) ];
+    FinalSlotDataPunctured=[ FinalSlotData(1:end-pbp)  powerSymbol(1:pbp) ];
 
     %As per data 9.6kbps, with 9.6 symbol per ms, each slot is 1.25ms, so 12 symbols per slot, qpsk modulated
     % In currnet slot , current symbol are spread by W1(2), Orthogonal channel at same time as pilot slot.
     DschSymbol = [DschDataPerFrame20((slotIndex-1)*DschSymbolPerSlot+1:slotIndex*DschSymbolPerSlot)];
+
+    if slotIndex == 1
+       disp(DschSymbol);
+       figure;
+       plot(real(DschSymbol),imag(DschSymbol), 'r.');
+       title('Input: 16-QAM Constellation Diagram (Normalized)')
+       xlabel('In-phase (I)');
+       ylabel('Quadrature (Q)');
+       grid on
+      axis([-4 4 -4 4]); % Adjust axis limits based on your normalization scale
+
+    end
 
     % Symbol are spread by W2, factor of 2, 24 symbol after spread but 384-24=360 space is free, so repeatatation of symbol
     % by 30 time, to match the chip rate 1.2288e6 per second.
@@ -423,6 +440,9 @@ end
 % each core given , same decsrambled data, based channnel code to be
 % assigned to core t process, we can think of such design.
 
+disp("slot index after tx");
+disp( Tx(1,:));
+
 ChipRate = 1.2288e6;
 rx1 = repmat(Tx,1,50);
 
@@ -449,6 +469,12 @@ MaxPathDelay = (1/2)*osf;
 
 
 BasebandIQ =fadingModel(rx, MaxPathDelay,1);
+
+
+disp("after fading");
+disp( BasebandIQ(1:1536));
+
+
 
 %Qrx1 =fadingModel(QDataSymbolPerSlotScrambled,1);
 
@@ -573,6 +599,11 @@ slotIndex=1
 % at every 20ms. , read offseted 20ms frame data from  cirecular buffer ? each elemnet
 % is buffer of 1.25 ms worth of sample at 1.2288e6 rate.
 RxCorrectedIQ = [BasebandIQ(offset:end)];
+
+
+
+disp("after correction ");
+disp( RxCorrectedIQ(1:1536));
 
 %Need to anayze more on this channel estmation based Pilot
 
@@ -721,8 +752,8 @@ for symbolIndex=1:SymbolPerSlot
   RxCorrectedI = [real(RxCorrectedIQ(((symbolIndex-1)*lengthWalsh +1):symbolIndex*lengthWalsh))];
   RxCorrectedQ = [imag(RxCorrectedIQ(((symbolIndex-1)*lengthWalsh +1):symbolIndex*lengthWalsh))];
 
-  pnQuadLongSeqI = [real(ILongCodeComplexD20(((symbolIndex-1)*1536 +1):symbolIndex*1536))];
-  pnQuadLongSeqQ = [imag(QLongCodeComplexD20(((symbolIndex-1)*1536 +1):symbolIndex*1536))];
+  pnQuadLongSeqI = [ILongCodeComplexD20(((symbolIndex-1)*1536 +1):symbolIndex*1536)];
+  pnQuadLongSeqQ = [QLongCodeComplexD20(((symbolIndex-1)*1536 +1):symbolIndex*1536)];
 
   %descsrambledI = RxShiftedI.*pnQuadLongSeqI; %Tc/Ts=N
   %descsrambledQ = RxShiftedQ.*pnQuadLongSeqQ;
@@ -744,19 +775,33 @@ for symbolIndex=1:SymbolPerSlot
 
       %W1 is channelization code, so every sybol has orthognal symbols addeded
       % with diffrent spread orthogonal code.
-      rxI = reshape(descsrambledI,length(W2),[]);
-      despreadI = (W2(:)' *rxI)/length(W2);
-      %equalizedI = finalH(symbolIndex)*despreadI
-      rxQ = reshape(descsrambledQ,length(W2),[]);
-      despreadQ = (W2(:)' *rxQ)/length(W2);
+      rxI = reshape(descsrambledI,length(W3),[]);
+      despreadI = (W3(:)' *rxI)/length(W3);
 
-      rx = despreadI +j*despreadQ;
+
+      %equalizedI = finalH(symbolIndex)*despreadI
+      rxQ = reshape(descsrambledQ,length(W3),[]);
+      despreadQ = (W3(:)' *rxQ)/length(W3);
+
+      %Rest are punctured or inored. as IT HAS BEEN REPEATED TO RATE MACTHED IN ENCODER
+      rx = despreadI(1:18) +j*despreadQ(1:18);
       equalizedSym(l) = sum([finalH(1:length(rx))].*rx);
    end
 
    equalizedSymbol(symbolIndex) = sum(equalizedSym);
 
  end
+
+
+   disp("slot 1 after decoding ");
+   disp( equalizedSymbol);
+
+   figure;
+   plot(abs(equalizedSymbol), 'b');
+   hold on;
+   plot(abs(DschSymbol),'g');
+   title('Output:16-QAM Constellation Diagram (Normalized)');
+   hold off;
 
 %for channelIndex=1:MaxChanell
 
