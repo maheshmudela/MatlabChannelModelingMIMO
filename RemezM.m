@@ -39,7 +39,7 @@ samplingRate=20e6; % 2pi, fs/2 <=>pi,
 %wp =   % fs/2<=>pi ==   w=2pi*f  , fs , w= 2*pi*fs/2=pi*fs , say f= fs/3
 %SIGH  is unit pi/T,
  %2*pi*f
-N=13;
+N=8
 wp=0.4*pi;  % f= 2000, fs , wp = 2*pi*(f/fs), normalizd.  fs=f===>2pi.
 
 %  |H(jw)|  < (1+-.01), IN Linear domain..  w<wp.
@@ -48,7 +48,7 @@ ws=0.5*pi;
 %----Wp
 %--------Wo(cut off)
 %----------Ws;
-N =8
+
 %Filter specification
 w=[];
 Ww=[];
@@ -58,7 +58,7 @@ w0= (wp + ws)/2;
 if (mod(N,2)==0)
   L=N/2 + 2;
 else
-L = ((N-1)/2) +2; % 2 , 6 roots , where polynomila show sign changes
+  L = ((N-1)/2) +2; % 2 , 6 roots , where polynomila show sign changes
 end
 % 0----------------------- wp----ws-------------------pi
 %-z------------- -z----------
@@ -81,8 +81,8 @@ Ws=1;
 
 %L=  32;
 w = [1:L+2]'*(pi/(L+2));
-
 W = Wp*(w<=wp) + Ws*(w>=ws); %Weight
+W = 0.00001 + W;
 D = 1*(w<=w0);
 shift=0;
 k=1:L+2
@@ -116,7 +116,7 @@ for iteration=0:Max
     % E(W) = W(w)(H(w) - P(w), if for these set of all freq
     % E(w) <= Mdel, then optimal solution is found..
     for i=1:L+2
-      p=1;
+      p=1.0;
       for j=1:L+2
          if i ~=j
            %xk, are cosne basis vector.
@@ -137,18 +137,16 @@ for iteration=0:Max
     %  H(w=0) = 20*log10(1+delp)
     %  H(w=1) = 20*log10(1-delp)
     %  H(W=2) = 20*log10(1+delp)
-    MaxDelp = 20*log10(1+delp);
-    MinDelp = 20*log10(1-delp);
+    MaxDelp = (1+delp);
+    MinDelp = (1-delp);
 
-    MaxDels = 20*log10(dels);
-    MinDels = 20*log10(-dels);
-
-
+    MaxDels = (dels);
+    MinDels = (-dels);
 
     %desired
     %repmat(A, n, m): Replicates the entire array \(A\) to create an \(n\times m\) grid of that array.
-    Hp= repmat([MaxDelp MinDelp],1, 2);
-    Hs= repmat([MaxDels MinDels],1, 2);
+    Hp= repmat([MaxDelp MinDelp],1, ceil(((L+2)/4)));
+    Hs= repmat([MaxDels  MinDels],1,ceil(((L+2)/4)));
     H=[Hp Hs];
    % plot(abs(power(10,H*.05)))
 
@@ -158,8 +156,8 @@ for iteration=0:Max
     num    = sum(H .*bk) %1 to L+2; maxima +
     weight = b./ W';
     %sign = [-1 1 -1 1]
-    sign = repmat([1 -1],1, 4);
-    denm = weight .*sign;
+    sign = repmat([1 -1],1, ceil((L+2)/2));
+    denm = weight .*sign; %deviations from unity
     denom1 = sum(weight .*sign)
 
     Mdel = num / denom1;
@@ -171,6 +169,8 @@ for iteration=0:Max
     %orientation: dk = bk(:) .* (xk(:)' - xk(end)); (this forces both to be compatible).
     dk= bk .* [xk' - xk(end)];
 
+    %Update the denm , deviation, update such devaition pattern wrt Mdel
+    % ck is computed or estimated
     ck = H - denm*Mdel;
 
     %finally estimating t=he p(w)...Langrange interpolation at any x.
@@ -178,7 +178,7 @@ for iteration=0:Max
     %Use the linspace function to generate exactly 8 points, starting at 0 and ending at \(\pi \)
     %w = rand([0 pi], 1, L+2);
     % 0 : pi/7 : pi
-    w = linspace(0, pi, 8);
+    w = linspace(0, pi, L+2);
 
     %dk1 = dk./w-xk
     %num = ck.*dk1;
@@ -190,7 +190,7 @@ for iteration=0:Max
     %dk1 = dk./w-xk
     %Ensure w is a column and xk is a row to create a matrix of distances
     dist = w - xk';
-    dk1  = dk(:)' ./ dist;
+    dk1  = dk ./ dist;
 
     %num = ck.*dk1;
     %dk1 = dk(:)' ./ dist;
@@ -198,9 +198,9 @@ for iteration=0:Max
     pw = (dk1 .*ck) ./ sum(dk1, 2);
 
     figure;
-    plot(abs(power(10,H*.05)))
+    plot(wk, H);
     figure;
-    plot(abs(power(10,pw*.05)))
+    plot(wk,pw);
 
     %estimated
     %pw = sum(num)/sum(dk1);
