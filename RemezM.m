@@ -81,6 +81,7 @@ Ws=1;
 
 %L=  32;
 w = [1:L+2]'*(pi/(L+2));
+
 W = Wp*(w<=wp) + Ws*(w>=ws); %Weight
 D = 1*(w<=w0);
 shift=0;
@@ -91,6 +92,7 @@ wk = [resPi .*k'];
 xk = [cos(wk)];
 xi = [cos(wk)];
 Max=1
+b = randi([0 1], 1, L+2);
 % K=delp/dels
 % W = 1/K for  0<w < wp
 % W = 1  for   w>ws to pi
@@ -118,8 +120,11 @@ for iteration=0:Max
       for j=1:L+2
          if i ~=j
            %xk, are cosne basis vector.
-           b = 1/(xk(i)-xi(j))
-           p = p*b;
+           b1 = 1/(xk(i)-xi(j))
+           %figure;
+           %plot(wk, b);
+
+           p = p*b1;
          end
        end
        b(i)=p;
@@ -135,26 +140,37 @@ for iteration=0:Max
     MaxDelp = 20*log10(1+delp);
     MinDelp = 20*log10(1-delp);
 
+    MaxDels = 20*log10(dels);
+    MinDels = 20*log10(-dels);
+
+
+
     %desired
     %repmat(A, n, m): Replicates the entire array \(A\) to create an \(n\times m\) grid of that array.
-    H= repmat([MaxDelp MinDelp],1, 4);
+    Hp= repmat([MaxDelp MinDelp],1, 2);
+    Hs= repmat([MaxDels MinDels],1, 2);
+    H=[Hp Hs];
+   % plot(abs(power(10,H*.05)))
+
     % plot([1:length(H)],H)
     bk=[b];
     %Matrix Inner Product	num = bk' * H;
     num    = sum(H .*bk) %1 to L+2; maxima +
     weight = b./ W';
     %sign = [-1 1 -1 1]
-    sign = repmat([-1 1],1, 4);
+    sign = repmat([1 -1],1, 4);
     denm = weight .*sign;
     denom1 = sum(weight .*sign)
 
     Mdel = num / denom1;
     %Logic: It scales each weight bk by the distance of its corresponding extremal
     % frequency from the final extremal point xk(end).
-    %This is a standard normalization step in the barycentric interpolation formula to ensure numerical stability.
+    %This is a standard normalization step in the barycentric interpolation
+    %formula to ensure numerical stability.
     %Fix: Ensure both are the same
     %orientation: dk = bk(:) .* (xk(:)' - xk(end)); (this forces both to be compatible).
     dk= bk .* [xk' - xk(end)];
+
     ck = H - denm*Mdel;
 
     %finally estimating t=he p(w)...Langrange interpolation at any x.
@@ -182,13 +198,9 @@ for iteration=0:Max
     pw = (dk1 .*ck) ./ sum(dk1, 2);
 
     figure;
-    plot(wk, H);
-    hold on;
-
-    plot(wk, pw);
-
-    hold off;
-
+    plot(abs(power(10,H*.05)))
+    figure;
+    plot(abs(power(10,pw*.05)))
 
     %estimated
     %pw = sum(num)/sum(dk1);
